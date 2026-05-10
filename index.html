@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>English Grammar Scramble</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .word-chip {
+            touch-action: manipulation;
+            transition: all 0.2s ease;
+        }
+        .word-chip:active {
+            transform: scale(0.95);
+        }
+        /* Specific chip states */
+        .chip-correct { background-color: #dcfce7 !important; border-color: #22c55e !important; color: #166534 !important; }
+        .chip-wrong { background-color: #fee2e2 !important; border-color: #ef4444 !important; color: #991b1b !important; }
+        .chip-default { background-color: #ffffff !important; border-color: #e2e8f0 !important; color: #1e293b !important; }
+        
+        .correct-bg-zone { background-color: #f0fdf4 !important; border-color: #22c55e !important; }
+        .wrong-bg-zone { background-color: #fef2f2 !important; border-color: #ef4444 !important; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen font-sans">
+    <div id="app" class="max-w-md mx-auto p-4 flex flex-col min-h-screen">
+        
+        <!-- Header -->
+        <header class="text-center mb-6">
+            <h1 class="text-2xl font-bold text-slate-800">Sentence Scramble</h1>
+            <p class="text-slate-500 text-sm">Unscramble the words to form correct sentences.</p>
+            <div id="progress" class="mt-2 text-xs font-semibold text-blue-600 uppercase tracking-wider"></div>
+        </header>
+
+        <!-- Game Area -->
+        <main class="flex-grow flex flex-col">
+            <!-- Target Area (Drop zone) -->
+            <div id="target-zone" class="bg-white rounded-xl shadow-sm p-4 mb-4 flex flex-wrap gap-2 content-start min-h-[140px] border-2 border-transparent">
+                <!-- User's assembled words go here -->
+            </div>
+
+            <!-- Source Area (Pool) -->
+            <div id="source-zone" class="bg-slate-200/50 rounded-xl p-4 flex flex-wrap gap-2 content-start min-h-[120px]">
+                <!-- Scrambled words go here -->
+            </div>
+        </main>
+
+        <!-- Controls -->
+        <footer class="mt-6 space-y-3">
+            <div id="hint-box" class="text-center text-sm font-medium h-6 text-amber-600 italic"></div>
+            <div id="feedback" class="text-center font-bold h-6"></div>
+            
+            <button id="check-btn" class="w-full bg-blue-600 text-white py-4 rounded-xl font-bold shadow-lg active:bg-blue-700 transition-colors">
+                CHECK FINAL ANSWER
+            </button>
+            
+            <div class="flex gap-2">
+                <button id="reset-btn" class="flex-1 bg-slate-200 text-slate-700 py-3 rounded-xl font-semibold">
+                    RESET
+                </button>
+                <button id="show-answers-btn" class="flex-1 bg-amber-100 text-amber-700 py-3 rounded-xl font-semibold hidden">
+                    SHOW ANSWERS
+                </button>
+            </div>
+        </footer>
+
+        <!-- Modal for Model Answers -->
+        <div id="answer-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-50">
+            <div class="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl">
+                <h2 class="text-xl font-bold mb-4">Model Answers</h2>
+                <div id="answers-list" class="space-y-3 text-sm text-slate-700 overflow-y-auto max-h-[60vh]"></div>
+                <button onclick="toggleModal(false)" class="mt-6 w-full bg-slate-800 text-white py-3 rounded-xl font-bold">CLOSE</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const sentences = [
+            "In the 1950s life used to be significantly slower.",
+            "There is much less choice than there used to be.",
+            "Technology has changed drastically over the last 20 years.",
+            "There are a lot more cars on the road nowadays.",
+            "Back then people no longer traveled by horse.",
+            "The city has changed slightly since I was a child.",
+            "There was even more pollution in the past compared to now.",
+            "There didn't use to be so many tall buildings before.",
+            "The house still looks the same but has changed significantly.",
+            "Prices have increased dramatically in recent years."
+        ];
+
+        let currentIdx = 0;
+        let userWords = [];
+        let poolWords = [];
+
+        const targetZone = document.getElementById('target-zone');
+        const sourceZone = document.getElementById('source-zone');
+        const checkBtn = document.getElementById('check-btn');
+        const resetBtn = document.getElementById('reset-btn');
+        const feedback = document.getElementById('feedback');
+        const hintBox = document.getElementById('hint-box');
+        const progress = document.getElementById('progress');
+        const showAnswersBtn = document.getElementById('show-answers-btn');
+        const modal = document.getElementById('answer-modal');
+        const answersList = document.getElementById('answers-list');
+
+        function initLevel() {
+            if (currentIdx >= sentences.length) {
+                gameFinished();
+                return;
+            }
+
+            const rawSentence = sentences[currentIdx];
+            const words = rawSentence.split(' ');
+            
+            // Hand start: Automatically put the first word in userWords
+            userWords = [words[0]];
+            
+            // Put the rest of the words in the pool and scramble them
+            poolWords = words.slice(1).sort(() => Math.random() - 0.5);
+            
+            render();
+            feedback.textContent = "";
+            hintBox.textContent = "";
+            targetZone.className = "bg-white rounded-xl shadow-sm p-4 mb-4 flex flex-wrap gap-2 content-start min-h-[140px] border-2 border-transparent";
+            progress.textContent = `Level ${currentIdx + 1} of ${sentences.length}`;
+        }
+
+        function render() {
+            targetZone.innerHTML = '';
+            sourceZone.innerHTML = '';
+
+            const correctWords = sentences[currentIdx].split(' ');
+
+            userWords.forEach((word, index) => {
+                const isCorrectPos = word === correctWords[index];
+                const chip = createChip(word, true, index, isCorrectPos);
+                targetZone.appendChild(chip);
+            });
+
+            poolWords.forEach((word, index) => {
+                const chip = createChip(word, false, index, null);
+                sourceZone.appendChild(chip);
+            });
+
+            if (userWords.length === 0) {
+                targetZone.innerHTML = '<span class="text-slate-400 text-sm italic w-full text-center py-8">Tap words to build the sentence</span>';
+            }
+        }
+
+        function createChip(text, isTarget, index, isCorrect) {
+            const btn = document.createElement('button');
+            let colorClass = "chip-default";
+            
+            if (isTarget) {
+                colorClass = isCorrect ? "chip-correct" : "chip-wrong";
+            }
+
+            btn.className = `word-chip px-3 py-2 border-2 rounded-lg shadow-sm font-medium active:scale-95 ${colorClass}`;
+            btn.textContent = text;
+            
+            btn.onclick = () => {
+                if (isTarget) {
+                    const removed = userWords.splice(index, 1)[0];
+                    poolWords.push(removed);
+                } else {
+                    const removed = poolWords.splice(index, 1)[0];
+                    userWords.push(removed);
+                }
+                targetZone.classList.remove('wrong-bg-zone', 'correct-bg-zone');
+                feedback.textContent = "";
+                hintBox.textContent = "";
+                render();
+            };
+            return btn;
+        }
+
+        checkBtn.onclick = () => {
+            const correctSentence = sentences[currentIdx];
+            const correctWords = correctSentence.split(' ');
+            const userString = userWords.join(' ');
+
+            if (userString === correctSentence) {
+                targetZone.className = "bg-white rounded-xl shadow-sm p-4 mb-4 flex flex-wrap gap-2 content-start min-h-[140px] border-2 correct-bg-zone";
+                feedback.textContent = "✅ EXCELLENT!";
+                feedback.className = "text-center font-bold h-6 text-green-600";
+                hintBox.textContent = "";
+                
+                setTimeout(() => {
+                    currentIdx++;
+                    initLevel();
+                }, 1500);
+            } else {
+                targetZone.className = "bg-white rounded-xl shadow-sm p-4 mb-4 flex flex-wrap gap-2 content-start min-h-[140px] border-2 wrong-bg-zone";
+                feedback.textContent = "❌ NOT QUITE COMPLETE";
+                feedback.className = "text-center font-bold h-6 text-red-600";
+                
+                if (userWords.length < correctWords.length) {
+                    hintBox.textContent = `Hint: You are missing ${correctWords.length - userWords.length} word(s).`;
+                } else {
+                    let firstMistakeIndex = -1;
+                    for (let i = 0; i < userWords.length; i++) {
+                        if (userWords[i] !== correctWords[i]) {
+                            firstMistakeIndex = i + 1;
+                            break;
+                        }
+                    }
+                    if (firstMistakeIndex !== -1) {
+                        hintBox.textContent = `Hint: Look closely at red word #${firstMistakeIndex}.`;
+                    }
+                }
+            }
+        };
+
+        resetBtn.onclick = () => {
+            initLevel();
+        };
+
+        function gameFinished() {
+            targetZone.innerHTML = `
+                <div class="w-full text-center py-6">
+                    <h2 class="text-xl font-bold text-green-600">Well Done!</h2>
+                    <p class="text-slate-600">You completed all sentences.</p>
+                </div>
+            `;
+            sourceZone.classList.add('hidden');
+            checkBtn.classList.add('hidden');
+            hintBox.classList.add('hidden');
+            progress.textContent = "Course Completed";
+            showAnswersBtn.classList.remove('hidden');
+            
+            answersList.innerHTML = sentences.map((s, i) => `
+                <div class="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                    <span class="font-bold text-blue-600 mr-2">${i+1}.</span>${s}
+                </div>
+            `).join('');
+        }
+
+        showAnswersBtn.onclick = () => toggleModal(true);
+        function toggleModal(show) {
+            modal.style.display = show ? 'flex' : 'none';
+        }
+
+        window.onload = initLevel;
+    </script>
+</body>
+</html>
